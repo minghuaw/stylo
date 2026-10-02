@@ -3721,7 +3721,6 @@ keyword = { values = ["none", "top"] }
 
 [scroll-behavior]
 struct = "box"
-servo_pref = "layout.unimplemented"
 spec = "https://drafts.csswg.org/cssom-view/#propdef-scroll-behavior"
 animation_type = "discrete"
 affects = ""
