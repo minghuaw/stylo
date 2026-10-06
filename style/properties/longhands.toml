@@ -132,9 +132,9 @@ affects = "layout"
 type = "ColorOrAuto"
 initial = "generics::color::ColorOrAuto::Auto"
 struct = "inherited_ui"
-engine = "gecko"
 spec = "https://drafts.csswg.org/css-ui-4/#widget-accent"
 ignored_when_colors_disabled = true
+servo_restyle_damage = "repaint"
 affects = "paint"
 
 [align-content]
@@ -1507,8 +1507,8 @@ servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
 [outline-color]
-type = "Color"
-initial = "computed_value::T::currentcolor()"
+type = "color::OutlineColor"
+initial = "generics::color::OutlineColor::auto()"
 struct = "outline"
 ignored_when_colors_disabled = true
 spec = "https://drafts.csswg.org/css-ui/#propdef-outline-color"

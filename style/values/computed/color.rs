@@ -9,7 +9,7 @@ use crate::typed_om::{KeywordValue, ToTyped, TypedValue};
 use crate::values::animated::ToAnimatedZero;
 use crate::values::computed::percentage::Percentage;
 use crate::values::generics::color::{
-    GenericCaretColor, GenericColor, GenericColorMix, GenericColorOrAuto,
+    GenericCaretColor, GenericColor, GenericColorMix, GenericColorOrAuto, GenericOutlineColor,
 };
 use std::fmt::{self, Write};
 use style_traits::{CssString, CssWriter, ToCss};
@@ -159,3 +159,6 @@ pub type ColorOrAuto = GenericColorOrAuto<Color>;
 
 /// caret-color
 pub type CaretColor = GenericCaretColor<Color>;
+
+/// outline-color
+pub type OutlineColor = GenericOutlineColor<Color>;

@@ -51,6 +51,12 @@ impl OutlineStyle {
             OutlineStyle::BorderStyle(ref style) => style.none_or_hidden(),
         }
     }
+
+    #[inline]
+    /// Whether this is the `auto` value.
+    pub fn is_auto(&self) -> bool {
+        matches!(*self, OutlineStyle::Auto)
+    }
 }
 
 impl Parse for OutlineStyle {

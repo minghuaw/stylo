@@ -2088,9 +2088,12 @@ pub mod outline {
         let mut parsed = 0;
         loop {
             parsed += 1;
-            try_parse_one!(context, input, color, specified::Color::parse);
+            // `outline-style` is tried before `outline-color` so that the `auto`
+            // keyword (valid for both `outline-style` and `outline-color`) binds
+            // to `outline-style`.
             try_parse_one!(context, input, style, outline_style::parse);
             try_parse_one!(context, input, width, outline_width::parse);
+            try_parse_one!(context, input, color, outline_color::parse);
             parsed -= 1;
             break;
         }

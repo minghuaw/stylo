@@ -268,6 +268,37 @@ impl<C> GenericCaretColor<C> {
 
 pub use self::GenericCaretColor as CaretColor;
 
+/// Outline color is a ColorOrAuto whose used value depends on the value of
+/// `outline-style`: `auto` resolves to the accent color when `outline-style`
+/// is `auto`, and to currentColor otherwise.
+#[derive(
+    Animate,
+    Clone,
+    ComputeSquaredDistance,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToAnimatedValue,
+    ToAnimatedZero,
+    ToComputedValue,
+    ToCss,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(transparent)]
+pub struct GenericOutlineColor<C>(pub GenericColorOrAuto<C>);
+
+impl<C> GenericOutlineColor<C> {
+    /// Returns the `auto` value.
+    pub fn auto() -> Self {
+        GenericOutlineColor(GenericColorOrAuto::Auto)
+    }
+}
+
+pub use self::GenericOutlineColor as OutlineColor;
+
 /// A light-dark(<light>, <dark>) function.
 #[derive(
     Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem, ToCss, ToResolvedValue,

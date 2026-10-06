@@ -16,7 +16,7 @@ use crate::values::computed::{
 };
 use crate::values::generics::color::{
     ColorMixFlags, GenericCaretColor, GenericColorMix, GenericColorMixItem, GenericColorOrAuto,
-    GenericLightDark,
+    GenericLightDark, GenericOutlineColor,
 };
 use crate::values::generics::Optional;
 use crate::values::specified::percentage::ToPercentage;
@@ -1000,6 +1000,15 @@ pub type CaretColor = GenericCaretColor<Color>;
 impl Parse for CaretColor {
     fn parse(context: &ParserContext, input: &mut Parser) -> Result<Self, ParseError> {
         ColorOrAuto::parse(context, input).map(GenericCaretColor)
+    }
+}
+
+/// outline-color
+pub type OutlineColor = GenericOutlineColor<Color>;
+
+impl Parse for OutlineColor {
+    fn parse(context: &ParserContext, input: &mut Parser) -> Result<Self, ParseError> {
+        ColorOrAuto::parse(context, input).map(GenericOutlineColor)
     }
 }
 
