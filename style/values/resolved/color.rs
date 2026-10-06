@@ -51,35 +51,3 @@ impl ToResolvedValue for computed::CaretColor {
         ))
     }
 }
-
-impl ToResolvedValue for computed::OutlineColor {
-    // The resolved value of `outline-color: auto` depends on `outline-style`:
-    // it stays `auto` (serialized as `auto`) when `outline-style` is `auto`,
-    // and resolves to currentColor otherwise.
-    type ResolvedValue = computed::ColorOrAuto;
-
-    #[inline]
-    fn to_resolved_value(self, context: &Context) -> Self::ResolvedValue {
-        match self.0 {
-            generics::ColorOrAuto::Auto if context.style.get_outline().outline_style.is_auto() => {
-                generics::ColorOrAuto::Auto
-            },
-            generics::ColorOrAuto::Auto => generics::ColorOrAuto::Color(
-                computed::Color::currentcolor().to_resolved_value(context),
-            ),
-            generics::ColorOrAuto::Color(color) => {
-                generics::ColorOrAuto::Color(color.to_resolved_value(context))
-            },
-        }
-    }
-
-    #[inline]
-    fn from_resolved_value(resolved: Self::ResolvedValue) -> Self {
-        match resolved {
-            generics::ColorOrAuto::Auto => generics::OutlineColor(generics::ColorOrAuto::Auto),
-            generics::ColorOrAuto::Color(color) => generics::OutlineColor(
-                generics::ColorOrAuto::Color(computed::Color::from_resolved_value(color)),
-            ),
-        }
-    }
-}

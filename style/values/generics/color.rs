@@ -283,6 +283,7 @@ pub use self::GenericCaretColor as CaretColor;
     ToAnimatedValue,
     ToAnimatedZero,
     ToComputedValue,
+    ToResolvedValue,
     ToCss,
     ToShmem,
     ToTyped,

@@ -199,6 +199,25 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         }
     }
 
+    /// <https://drafts.csswg.org/css-ui/#propdef-outline-color>
+    ///
+    /// `outline-color: auto` computes to `currentcolor` unless `outline-style`
+    /// is `auto`, in which case it stays `auto`.
+    fn adjust_for_outline_color(&mut self) {
+        use crate::values::computed::Color;
+        use crate::values::generics::color::{ColorOrAuto, OutlineColor};
+        let outline = self.style.get_outline();
+        if outline.outline_style.is_auto() {
+            return;
+        }
+        if !matches!(outline.outline_color.0, ColorOrAuto::Auto) {
+            return;
+        }
+        self.style
+            .mutate_outline()
+            .set_outline_color(OutlineColor(ColorOrAuto::Color(Color::currentcolor())));
+    }
+
     /// Whether we should skip any item-based display property blockification on
     /// this element.
     fn skip_item_display_fixup<E>(&self, element: Option<E>) -> bool
@@ -1072,6 +1091,7 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
             self.adjust_for_justify_items();
         }
         self.adjust_for_table_text_align();
+        self.adjust_for_outline_color();
         self.adjust_for_writing_mode(layout_parent_style);
         #[cfg(feature = "gecko")]
         self.adjust_for_ruby(element);
