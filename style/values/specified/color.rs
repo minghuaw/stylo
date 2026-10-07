@@ -1186,6 +1186,8 @@ pub enum ForcedColorAdjust {
     Auto,
     /// Respect specified colors.
     None,
+    /// Preserve the parent's color if it wasn't adjusted.
+    PreserveParentColor,
 }
 
 /// Possible values for the forced-colors media query.
