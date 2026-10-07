@@ -69,6 +69,9 @@ pub(super) struct ExtraDeviceData {
     /// Whether the user prefers light mode or dark mode
     #[ignore_malloc_size_of = "Pure stack type"]
     prefers_color_scheme: PrefersColorScheme,
+    /// Whether the user is requesting forced colors mode.
+    #[ignore_malloc_size_of = "Pure stack type"]
+    forced_colors: ForcedColors,
     /// The capabilities of the primary pointer input
     #[ignore_malloc_size_of = "Pure stack type"]
     primary_pointer_capabilities: PointerCapabilities,
@@ -91,6 +94,7 @@ impl Device {
         font_metrics_provider: Box<dyn FontMetricsProvider>,
         default_values: Arc<ComputedValues>,
         prefers_color_scheme: PrefersColorScheme,
+        forced_colors: ForcedColors,
         primary_pointer_capabilities: PointerCapabilities,
         all_pointer_capabilities: PointerCapabilities,
     ) -> Device {
@@ -119,6 +123,7 @@ impl Device {
                 device_pixel_ratio,
                 quirks_mode,
                 prefers_color_scheme,
+                forced_colors,
                 primary_pointer_capabilities,
                 all_pointer_capabilities,
                 font_metrics_provider,
@@ -278,17 +283,21 @@ impl Device {
 
     /// Returns whether document colors are enabled.
     pub fn forced_colors(&self) -> ForcedColors {
-        ForcedColors::None
+        self.extra.forced_colors
     }
 
     /// Returns the default background color.
+    ///
+    /// This is only used by forced-colors mode, which uses the light color set.
     pub fn default_background_color(&self) -> AbsoluteColor {
-        AbsoluteColor::WHITE
+        self.system_color(SystemColor::Canvas, ColorSchemeFlags::LIGHT)
     }
 
     /// Returns the default foreground color.
+    ///
+    /// This is only used by forced-colors mode, which uses the light color set.
     pub fn default_color(&self) -> AbsoluteColor {
-        AbsoluteColor::BLACK
+        self.system_color(SystemColor::Canvastext, ColorSchemeFlags::LIGHT)
     }
 
     /// Set the [`PrefersColorScheme`] value on this [`Device`].
@@ -303,6 +312,15 @@ impl Device {
     /// Returns the color scheme of this [`Device`].
     pub fn color_scheme(&self) -> PrefersColorScheme {
         self.extra.prefers_color_scheme
+    }
+
+    /// Set the [`ForcedColors`] value on this [`Device`].
+    ///
+    /// Note that this does not update any associated `Stylist`. For this you must call
+    /// `Stylist::media_features_change_changed_style` and
+    /// `Stylist::force_stylesheet_origins_dirty`.
+    pub fn set_forced_colors(&mut self, new_forced_colors: ForcedColors) {
+        self.extra.forced_colors = new_forced_colors;
     }
 
     /// Set the [`PointerCapbabilities`] value for the primary pointer on this [`Device`]

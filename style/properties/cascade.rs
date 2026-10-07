@@ -508,12 +508,14 @@ fn tweak_when_ignoring_colors(
         return;
     }
 
-    // Always honor colors if forced-color-adjust is set to none.
+    // Always honor colors if forced-color-adjust is set to none. preserve-parent-color behaves like
+    // none in this (cascade-time) model: inherited colors already carry the parent's adjusted
+    // computed value, and explicitly cascaded colors are preserved.
     let forced = context
         .builder
         .get_inherited_text()
         .clone_forced_color_adjust();
-    if forced == computed::ForcedColorAdjust::None {
+    if forced != computed::ForcedColorAdjust::Auto {
         return;
     }
 
