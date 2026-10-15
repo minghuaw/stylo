@@ -40,7 +40,7 @@ pub static PYTHON: LazyLock<String> = LazyLock::new(|| {
     })
 });
 
-fn generate_properties(engine: &str) {
+fn generate_properties(engine: &str, ai_gen: bool) {
     for entry in WalkDir::new("properties") {
         let entry = entry.unwrap();
         match entry.path().extension().and_then(|e| e.to_str()) {
@@ -62,6 +62,7 @@ fn generate_properties(engine: &str) {
         // TODO(mrobinson): Is this happening because of how we run this script? It
         // would be better to ensure are just placed in the output directory.
         .env("PYTHONDONTWRITEBYTECODE", "1")
+        .env("STYLO_AI_GEN", if ai_gen { "1" } else { "0" })
         .arg(&script)
         .arg(engine)
         .arg("style-crate")
@@ -86,6 +87,6 @@ fn main() {
     };
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:out_dir={}", env::var("OUT_DIR").unwrap());
-    generate_properties(engine);
+    generate_properties(engine, cfg!(feature = "ht_ai_gen"));
     build_gecko::generate();
 }

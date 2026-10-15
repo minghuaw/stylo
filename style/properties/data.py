@@ -879,8 +879,12 @@ class Descriptor(object):
 
 
 class PropertiesData(object):
-    def __init__(self, engine):
+    def __init__(self, engine, ai_gen=False):
         self.engine = engine
+        # Whether the `ht_ai_gen` feature is enabled. Properties declared with
+        # `ai_gen = true` are built for Gecko unconditionally, and for Servo
+        # only when this flag is set.
+        self.ai_gen = ai_gen
         self.longhands = []
         self.longhands_by_name = {}
         self.logical_groups = {}
@@ -1081,8 +1085,13 @@ class PropertiesData(object):
         for prefix, pref in property.extra_prefixes:
             property.aliases.append(("-%s-%s" % (prefix, property.name), pref))
 
-    def declare_longhand(self, style_struct, name, extra_gecko_aliases=None, engine=None, **kwargs):
-        if engine and self.engine != engine:
+    def declare_longhand(
+        self, style_struct, name, extra_gecko_aliases=None, engine=None, ai_gen=False, **kwargs
+    ):
+        if ai_gen:
+            if self.engine == "servo" and not self.ai_gen:
+                return
+        elif engine and self.engine != engine:
             return
         if extra_gecko_aliases and self.engine == "gecko":
             kwargs.setdefault('aliases', []).extend(extra_gecko_aliases)

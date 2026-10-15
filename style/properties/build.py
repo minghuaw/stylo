@@ -36,7 +36,8 @@ def main():
     if engine not in ["servo", "gecko"]:
         abort(usage)
 
-    properties = data.PropertiesData(engine)
+    ai_gen = os.environ.get("STYLO_AI_GEN", "0") == "1"
+    properties = data.PropertiesData(engine, ai_gen=ai_gen)
     properties_template = os.path.join(BASE, "properties.mako.rs")
     properties_file = render(
         properties_template,

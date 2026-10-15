@@ -50,6 +50,7 @@ servo = [
 gecko_debug = []
 gecko_refcount_logging = []
 nsstring = []
+ht_ai_gen = []
 
 [dependencies]
 app_units = "0.7.8"
