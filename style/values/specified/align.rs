@@ -67,6 +67,10 @@ bitflags! {
         const SPACE_EVENLY = 16;
         /// `anchor-center`
         const ANCHOR_CENTER = 17;
+        /// 'flow-start'
+        const FLOW_START = 18;
+        /// 'flow-end'
+        const FLOW_END = 19;
 
         // Additional flags stored in the upper bits:
         /// 'legacy' (mutually exclusive w. SAFE & UNSAFE)
@@ -100,6 +104,20 @@ impl AlignFlags {
     pub fn flags(&self) -> Self {
         *self & AlignFlags::FLAG_BITS
     }
+}
+
+/// Canonicalizes the legacy `flex-start`/`flex-end` keywords to the
+/// flow-relative `flow-start`/`flow-end` keywords, which is how they serialize
+/// in computed styles.
+///
+/// <https://drafts.csswg.org/css-align/#valdef-self-position-flow-start>
+pub(crate) fn canonicalize_computed_alignment(alignment: AlignFlags) -> AlignFlags {
+    let value = match alignment.value() {
+        AlignFlags::FLEX_START => AlignFlags::FLOW_START,
+        AlignFlags::FLEX_END => AlignFlags::FLOW_END,
+        value => value,
+    };
+    alignment.with_value(value)
 }
 
 impl ToCss for AlignFlags {
@@ -143,6 +161,8 @@ impl ToCss for AlignFlags {
             AlignFlags::SPACE_AROUND => "space-around",
             AlignFlags::SPACE_EVENLY => "space-evenly",
             AlignFlags::ANCHOR_CENTER => "anchor-center",
+            AlignFlags::FLOW_START => "flow-start",
+            AlignFlags::FLOW_END => "flow-end",
             _ => unreachable!(),
         })
     }
@@ -171,7 +191,6 @@ pub enum AxisDirection {
     MallocSizeOf,
     PartialEq,
     Serialize,
-    ToComputedValue,
     ToCss,
     ToResolvedValue,
     ToShmem,
@@ -262,6 +281,8 @@ impl ContentDistribution {
             "end" => AlignFlags::END,
             "flex-start" => AlignFlags::FLEX_START,
             "flex-end" => AlignFlags::FLEX_END,
+            "flow-start" => AlignFlags::FLOW_START,
+            "flow-end" => AlignFlags::FLOW_END,
             "center" => AlignFlags::CENTER,
             "left" if axis == AxisDirection::Inline => AlignFlags::LEFT,
             "right" if axis == AxisDirection::Inline => AlignFlags::RIGHT,
@@ -279,7 +300,7 @@ impl SpecifiedValueInfo for ContentDistribution {
         list_baseline_keywords(f); // block-axis only
         list_content_distribution_keywords(f);
         list_overflow_position_keywords(f);
-        f(&["start", "end", "flex-start", "flex-end", "center"]);
+        f(&["start", "end", "flex-start", "flex-end", "flow-start", "flow-end", "center"]);
         f(&["left", "right"]); // inline-axis only
     }
 }
@@ -298,7 +319,6 @@ impl SpecifiedValueInfo for ContentDistribution {
     MallocSizeOf,
     PartialEq,
     Serialize,
-    ToComputedValue,
     ToCss,
     ToResolvedValue,
     ToShmem,
@@ -380,6 +400,8 @@ impl SelfAlignment {
             AlignFlags::RIGHT => AlignFlags::LEFT,
             AlignFlags::SELF_START => AlignFlags::SELF_END,
             AlignFlags::SELF_END => AlignFlags::SELF_START,
+            AlignFlags::FLOW_START => AlignFlags::FLOW_END,
+            AlignFlags::FLOW_END => AlignFlags::FLOW_START,
 
             AlignFlags::AUTO
             | AlignFlags::NORMAL
@@ -428,7 +450,6 @@ impl SpecifiedValueInfo for SelfAlignment {
     MallocSizeOf,
     PartialEq,
     Serialize,
-    ToComputedValue,
     ToCss,
     ToResolvedValue,
     ToShmem,
@@ -642,6 +663,8 @@ fn parse_self_position(
         "end" => AlignFlags::END,
         "flex-start" => AlignFlags::FLEX_START,
         "flex-end" => AlignFlags::FLEX_END,
+        "flow-start" => AlignFlags::FLOW_START,
+        "flow-end" => AlignFlags::FLOW_END,
         "center" => AlignFlags::CENTER,
         "self-start" => AlignFlags::SELF_START,
         "self-end" => AlignFlags::SELF_END,
@@ -662,6 +685,8 @@ fn list_self_position_keywords(f: KeywordsCollectFn, axis: AxisDirection) {
         "end",
         "flex-start",
         "flex-end",
+        "flow-start",
+        "flow-end",
         "center",
         "self-start",
         "self-end",
