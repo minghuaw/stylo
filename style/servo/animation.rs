@@ -27,10 +27,14 @@ use crate::style_resolver::StyleResolverForElement;
 use crate::stylesheets::keyframes_rule::{KeyframesAnimation, KeyframesStep, KeyframesStepValue};
 use crate::stylesheets::layer_rule::LayerOrder;
 use crate::values::animated::{Animate, Procedure};
-use crate::values::computed::TimingFunction;
+use crate::values::computed::{
+    AnimationRangeEnd, AnimationRangeStart, LengthPercentage, TimingFunction,
+};
+use crate::values::generics::animation::AnimationRangeValue;
 use crate::values::generics::easing::BeforeFlag;
 use crate::values::specified::TransitionBehavior;
 use crate::Atom;
+use app_units::Au;
 use debug_unreachable::debug_unreachable;
 use parking_lot::RwLock;
 use rustc_hash::FxHashMap;
@@ -556,6 +560,57 @@ impl ComputedKeyframe {
     }
 }
 
+/// The state of a progress-based (scroll or view) timeline driving an animation.
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq)]
+pub struct ProgressTimelineState {
+    /// The current progress of the timeline in `[0, 1]`.
+    pub progress: f64,
+    /// The resolved `animation-range` edges `(start, end)` in timeline progress.
+    pub attachment_range: (f64, f64),
+}
+
+/// Resolves one `animation-range` edge for a scroll timeline.
+///
+/// Matches Gecko's `ScrollTimeline::IntervalForAttachmentRange`: the
+/// length-percentage is resolved against the full scroll range, and named
+/// ranges that a scroll timeline does not support are ignored (the offset is
+/// still used).
+fn resolve_scroll_range_edge(
+    value: &AnimationRangeValue<LengthPercentage>,
+    max_scroll_offset: Au,
+) -> f64 {
+    let basis = max_scroll_offset.0;
+    if basis <= 0 {
+        return 0.0;
+    }
+    value.lp.to_used_value(max_scroll_offset).0 as f64 / basis as f64
+}
+
+fn resolve_scroll_attachment_range(
+    start: &AnimationRangeValue<LengthPercentage>,
+    end: &AnimationRangeValue<LengthPercentage>,
+    max_scroll_offset: Au,
+) -> (f64, f64) {
+    (
+        resolve_scroll_range_edge(start, max_scroll_offset),
+        resolve_scroll_range_edge(end, max_scroll_offset),
+    )
+}
+
+/// Maps a progress-timeline state to the animation's local progress.
+///
+/// A zero-length attachment range has no active interval; return 0 so the fill
+/// mode decides what to show for the element.
+fn local_progress_for_timeline(state: &ProgressTimelineState) -> f64 {
+    let (start, end) = state.attachment_range;
+    let length = end - start;
+    if length.abs() <= f64::EPSILON {
+        0.0
+    } else {
+        (state.progress - start) / length
+    }
+}
+
 /// A CSS Animation
 #[derive(Clone, MallocSizeOf)]
 pub struct Animation {
@@ -581,6 +636,23 @@ pub struct Animation {
     /// The `animation-fill-mode` property of this animation.
     pub fill_mode: AnimationFillMode,
 
+    /// The `animation-range-start` property of this animation. This is only
+    /// meaningful for progress-based (scroll or view) timelines; the document
+    /// timeline ignores it, matching Gecko's `AtTimelineBoundary` behavior.
+    pub range_start: AnimationRangeStart,
+
+    /// The `animation-range-end` property of this animation. This is only
+    /// meaningful for progress-based (scroll or view) timelines; the document
+    /// timeline ignores it, matching Gecko's `AtTimelineBoundary` behavior.
+    pub range_end: AnimationRangeEnd,
+
+    /// The progress-based timeline driving this animation, if any. `None` means
+    /// the document timeline. A scroll/view timeline producer sets this each
+    /// tick; the animation then takes its progress from
+    /// `progress_timeline.progress` mapped through the attachment range instead
+    /// of from the document clock.
+    pub progress_timeline: Option<ProgressTimelineState>,
+
     /// The current iteration state for the animation.
     pub iteration_state: KeyframesIterationState,
 
@@ -602,6 +674,30 @@ pub struct Animation {
 }
 
 impl Animation {
+    /// Resolves `animation-range-start`/`-end` for a scroll timeline with the
+    /// given maximum scroll offset, returning the attachment range in timeline
+    /// progress. This is the geometry-independent part of the consumer; a
+    /// scroll timeline producer calls it with its current max scroll offset.
+    pub fn resolve_scroll_attachment_range(&self, max_scroll_offset: Au) -> (f64, f64) {
+        resolve_scroll_attachment_range(&self.range_start.0, &self.range_end.0, max_scroll_offset)
+    }
+
+    /// Sets the current progress of the progress-based timeline driving this
+    /// animation and the attachment range resolved by that timeline. A future
+    /// scroll/view timeline producer calls this each tick; the animation then
+    /// samples its effect from this progress instead of the document clock.
+    pub fn set_progress_timeline(&mut self, progress: f64, attachment_range: (f64, f64)) {
+        self.progress_timeline = Some(ProgressTimelineState {
+            progress,
+            attachment_range,
+        });
+    }
+
+    /// Returns this animation to the document timeline.
+    pub fn clear_progress_timeline(&mut self) {
+        self.progress_timeline = None;
+    }
+
     /// Whether or not this animation is cancelled by changes from a new style.
     fn is_cancelled_in_new_style(&self, new_style: &Arc<ComputedValues>) -> bool {
         let new_ui = new_style.get_ui();
@@ -715,11 +811,21 @@ impl Animation {
             return false;
         }
 
-        let progress = match self.state {
+        match self.state {
             AnimationState::Finished => return true,
-            AnimationState::Paused(progress) => progress,
-            AnimationState::Running => (time - self.started_at) / self.duration,
-            AnimationState::Pending | AnimationState::Canceled => return false,
+            AnimationState::Canceled => return false,
+            _ => {},
+        }
+
+        let progress = match self.progress_timeline {
+            Some(ref state) => local_progress_for_timeline(state),
+            None => match self.state {
+                AnimationState::Paused(progress) => progress,
+                AnimationState::Running => (time - self.started_at) / self.duration,
+                AnimationState::Finished | AnimationState::Canceled | AnimationState::Pending => {
+                    return false
+                },
+            },
         };
 
         progress >= self.current_iteration_end_progress()
@@ -748,9 +854,13 @@ impl Animation {
         let old_direction = self.current_direction;
         let old_state = self.state.clone();
         let old_iteration_state = self.iteration_state.clone();
+        let old_progress_timeline = self.progress_timeline;
 
         *self = other.clone();
         self.current_direction = old_direction;
+        // The new animation is created without a timeline binding, so preserve
+        // the state supplied by the progress-based timeline producer.
+        self.progress_timeline = other.progress_timeline.or(old_progress_timeline);
 
         if self.delay != old_delay {
             // `started_at` incorporates the delay, so changing the delay necessarily changes `started_at`.
@@ -846,14 +956,23 @@ impl Animation {
             return;
         }
 
+        if self.state == AnimationState::Canceled {
+            return;
+        }
+
         // Raw progress ratio of the animation: can be negative (before start) or
-        // >1.0 (after end or during multiple iterations).
-        let progress = match self.state {
-            AnimationState::Running | AnimationState::Pending | AnimationState::Finished => {
-                (now - self.started_at) / self.duration
+        // >1.0 (after end or during multiple iterations). For a progress-based
+        // timeline this is the timeline position mapped through the resolved
+        // `animation-range`; the document timeline keeps the time-based ratio.
+        let progress = match self.progress_timeline {
+            Some(ref state) => local_progress_for_timeline(state),
+            None => match self.state {
+                AnimationState::Running | AnimationState::Pending | AnimationState::Finished => {
+                    (now - self.started_at) / self.duration
+                },
+                AnimationState::Paused(progress) => progress,
+                AnimationState::Canceled => return,
             },
-            AnimationState::Paused(progress) => progress,
-            AnimationState::Canceled => return,
         };
 
         if progress < 0.
@@ -1889,6 +2008,9 @@ pub fn maybe_start_animations<E>(
             started_at,
             duration,
             fill_mode: style.animation_fill_mode_mod(i),
+            range_start: style.animation_range_start_mod(i),
+            range_end: style.animation_range_end_mod(i),
+            progress_timeline: None,
             delay,
             iteration_state,
             state,
@@ -1918,5 +2040,95 @@ pub fn maybe_start_animations<E>(
         }
 
         animation_state.animations.push(new_animation);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::values::computed::Percentage;
+    use crate::values::specified::animation::TimelineRangeName;
+
+    fn percent(p: f32) -> LengthPercentage {
+        LengthPercentage::new_percent(Percentage(p))
+    }
+
+    fn edge(
+        name: TimelineRangeName,
+        lp: LengthPercentage,
+    ) -> AnimationRangeValue<LengthPercentage> {
+        AnimationRangeValue::new(name, lp)
+    }
+
+    #[test]
+    fn scroll_range_resolves_percentages_against_the_full_range() {
+        let start = edge(TimelineRangeName::None, percent(0.1));
+        let end = edge(TimelineRangeName::None, percent(0.9));
+        assert_eq!(
+            resolve_scroll_attachment_range(&start, &end, Au::from_px(100)),
+            (0.1, 0.9)
+        );
+    }
+
+    #[test]
+    fn scroll_range_normal_is_the_full_range() {
+        let start = edge(TimelineRangeName::Normal, percent(0.0));
+        let end = edge(TimelineRangeName::Normal, percent(1.0));
+        assert_eq!(
+            resolve_scroll_attachment_range(&start, &end, Au::from_px(100)),
+            (0.0, 1.0)
+        );
+    }
+
+    #[test]
+    fn scroll_range_ignores_unsupported_named_ranges() {
+        // Gecko's ScrollTimeline ignores named ranges it does not support and
+        // still resolves the offset against the full scroll range.
+        let start = edge(TimelineRangeName::Entry, percent(0.25));
+        let end = edge(TimelineRangeName::Exit, percent(0.75));
+        assert_eq!(
+            resolve_scroll_attachment_range(&start, &end, Au::from_px(200)),
+            (0.25, 0.75)
+        );
+    }
+
+    #[test]
+    fn scroll_range_zero_basis_does_not_divide_by_zero() {
+        let start = edge(TimelineRangeName::None, percent(0.0));
+        let end = edge(TimelineRangeName::None, percent(1.0));
+        assert_eq!(
+            resolve_scroll_attachment_range(&start, &end, Au::from_px(0)),
+            (0.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn timeline_progress_maps_into_the_attachment_range() {
+        let state = ProgressTimelineState {
+            progress: 0.4,
+            attachment_range: (0.2, 0.6),
+        };
+        assert!((local_progress_for_timeline(&state) - 0.5).abs() < 1e-9);
+
+        let state = ProgressTimelineState {
+            progress: 0.1,
+            attachment_range: (0.2, 0.6),
+        };
+        assert!((local_progress_for_timeline(&state) + 0.25).abs() < 1e-9);
+
+        let state = ProgressTimelineState {
+            progress: 0.8,
+            attachment_range: (0.2, 0.6),
+        };
+        assert!((local_progress_for_timeline(&state) - 1.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn zero_length_attachment_range_maps_to_zero() {
+        let state = ProgressTimelineState {
+            progress: 0.5,
+            attachment_range: (0.3, 0.3),
+        };
+        assert_eq!(local_progress_for_timeline(&state), 0.0);
     }
 }

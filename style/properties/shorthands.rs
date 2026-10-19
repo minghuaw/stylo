@@ -1803,7 +1803,6 @@ pub mod view_timeline {
     }
 }
 
-#[cfg(feature = "gecko")]
 pub mod animation_range {
     pub use crate::properties::generated::shorthands::animation_range::*;
 
@@ -3417,15 +3416,28 @@ pub mod animation {
             {
                 return Ok(());
             }
+            #[cfg(feature = "gecko")]
             if self
                 .animation_range_start
                 .is_some_and(|v| v.0.len() != 1 || !v.0[0].0.is_normal())
             {
                 return Ok(());
             }
+            #[cfg(feature = "servo")]
+            if self.animation_range_start.0.len() != 1
+                || !self.animation_range_start.0[0].0.is_normal()
+            {
+                return Ok(());
+            }
+            #[cfg(feature = "gecko")]
             if self
                 .animation_range_end
                 .is_some_and(|v| v.0.len() != 1 || !v.0[0].0.is_normal())
+            {
+                return Ok(());
+            }
+            #[cfg(feature = "servo")]
+            if self.animation_range_end.0.len() != 1 || !self.animation_range_end.0[0].0.is_normal()
             {
                 return Ok(());
             }
