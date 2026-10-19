@@ -162,17 +162,14 @@ impl TrackRepeat<LengthPercentage, Integer> {
                     loop {
                         current_names = input.try_parse(parse_line_names).unwrap_or_default();
                         if let Ok(track_size) = input.try_parse(|i| TrackSize::parse(context, i)) {
-                            if !track_size.is_fixed() {
-                                if is_auto {
-                                    // should be <fixed-size> for <auto-repeat>
-                                    return Err(ParseError::custom(
-                                        StyleParseErrorKind::UnspecifiedError,
-                                    ));
-                                }
-
-                                if repeat_type == RepeatType::Fixed {
-                                    repeat_type = RepeatType::Normal // <track-size> for sure
-                                }
+                            // CSS Grid Level 3 relaxes <auto-repeat> to accept any
+                            // <track-size>, including intrinsic sizes:
+                            // <https://drafts.csswg.org/css-grid-3/#masonry-intrinsic-repeat>
+                            if !track_size.is_fixed()
+                                && !is_auto
+                                && repeat_type == RepeatType::Fixed
+                            {
+                                repeat_type = RepeatType::Normal // <track-size> for sure
                             }
 
                             values.push(track_size);
@@ -214,10 +211,10 @@ impl Parse for TrackList<LengthPercentage, Integer> {
                 .extend_from_slice(&mut input.try_parse(parse_line_names).unwrap_or_default());
             if let Ok(track_size) = input.try_parse(|i| TrackSize::parse(context, i)) {
                 if !track_size.is_fixed() {
-                    at_least_one_not_fixed = true;
-                    if auto_repeat_index.is_some() {
-                        // <auto-track-list> only accepts <fixed-size> and <fixed-repeat>
-                        return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
+                    // Before the `<auto-repeat>` only fixed sizes are allowed. After
+                    // it, CSS Grid Level 3 allows intrinsic sizes as well.
+                    if auto_repeat_index.is_none() {
+                        at_least_one_not_fixed = true;
                     }
                 }
 
