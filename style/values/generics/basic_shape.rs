@@ -354,7 +354,6 @@ pub use self::GenericShapeRadius as ShapeRadius;
     SpecifiedValueInfo,
     ToAnimatedValue,
     ToComputedValue,
-    ToCss,
     ToResolvedValue,
     ToShmem,
 )]
@@ -364,6 +363,12 @@ pub struct GenericPolygon<LengthPercentage> {
     /// The filling rule for a polygon.
     #[css(skip_if = "is_default")]
     pub fill: FillRule,
+    /// The radius used to round the corners of the polygon. `None` means square
+    /// corners; a zero radius is normalized to `None` so that it is not
+    /// serialized.
+    ///
+    /// <https://drafts.csswg.org/css-shapes/#funcdef-polygon>
+    pub round: Option<LengthPercentage>,
     /// A collection of (x, y) coordinates to draw the polygon.
     #[css(iterable)]
     pub coordinates: crate::OwnedSlice<PolygonCoord<LengthPercentage>>,
@@ -593,10 +598,16 @@ where
         if self.fill != other.fill {
             return Err(());
         }
+        let round = match (&self.round, &other.round) {
+            (Some(this), Some(other)) => Some(this.animate(other, procedure)?),
+            (None, None) => None,
+            _ => return Err(()),
+        };
         let coordinates =
             lists::by_computed_value::animate(&self.coordinates, &other.coordinates, procedure)?;
         Ok(Polygon {
             fill: self.fill,
+            round,
             coordinates,
         })
     }
@@ -610,7 +621,53 @@ where
         if self.fill != other.fill {
             return Err(());
         }
-        lists::by_computed_value::squared_distance(&self.coordinates, &other.coordinates)
+        let mut distance =
+            lists::by_computed_value::squared_distance(&self.coordinates, &other.coordinates)?;
+        match (&self.round, &other.round) {
+            (Some(this), Some(other)) => {
+                distance = distance + this.compute_squared_distance(other)?;
+            },
+            (None, None) => {},
+            _ => return Err(()),
+        }
+        Ok(distance)
+    }
+}
+
+impl<L> ToCss for Polygon<L>
+where
+    L: ToCss,
+{
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        dest.write_str("polygon(")?;
+        let mut has_prefix = false;
+        if self.fill != FillRule::default() {
+            self.fill.to_css(dest)?;
+            has_prefix = true;
+        }
+        if let Some(ref round) = self.round {
+            if has_prefix {
+                dest.write_char(' ')?;
+            }
+            dest.write_str("round ")?;
+            round.to_css(dest)?;
+            has_prefix = true;
+        }
+        if has_prefix {
+            dest.write_str(", ")?;
+        }
+        for (index, coordinate) in self.coordinates.iter().enumerate() {
+            if index > 0 {
+                dest.write_str(", ")?;
+            }
+            coordinate.0.to_css(dest)?;
+            dest.write_char(' ')?;
+            coordinate.1.to_css(dest)?;
+        }
+        dest.write_char(')')
     }
 }
 

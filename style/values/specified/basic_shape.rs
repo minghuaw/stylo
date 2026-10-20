@@ -24,7 +24,7 @@ use crate::values::specified::length::LengthPercentageOrAuto;
 use crate::values::specified::position::Position;
 use crate::values::specified::url::SpecifiedUrl;
 use crate::values::specified::{
-    LengthPercentage, NoCalcPercentage, NonNegativeLengthPercentage, SVGPathData,
+    LengthPercentage, NoCalcPercentage, NonNegativeLength, NonNegativeLengthPercentage, SVGPathData,
 };
 use crate::values::CSSFloat;
 use crate::Zero;
@@ -486,7 +486,24 @@ impl Polygon {
         input: &mut Parser,
         shape_type: ShapeType,
     ) -> Result<Self, ParseError> {
-        let fill = parse_fill_rule(input, shape_type, true /* has comma */);
+        // `polygon()` accepts an optional `<fill-rule>` and an optional
+        // `round <length>` before a comma-separated list of coordinates.
+        //
+        // <https://drafts.csswg.org/css-shapes-1/#funcdef-basic-shape-polygon>
+        let fill = match shape_type {
+            ShapeType::Filled => input.try_parse(FillRule::parse).ok(),
+            ShapeType::Outline => None,
+        };
+        let round = input
+            .try_parse(|i| -> Result<_, ParseError> {
+                i.expect_ident_matching("round")?;
+                NonNegativeLength::parse(context, i)
+            })
+            .ok();
+        if fill.is_some() || round.is_some() {
+            input.expect_comma()?;
+        }
+
         let coordinates = input
             .parse_comma_separated(|i| {
                 Ok(PolygonCoord(
@@ -496,7 +513,17 @@ impl Polygon {
             })?
             .into();
 
-        Ok(Polygon { fill, coordinates })
+        Ok(Polygon {
+            fill: fill.unwrap_or_default(),
+            round: round.and_then(|round| {
+                if round.is_zero() {
+                    None
+                } else {
+                    Some(round.0.into())
+                }
+            }),
+            coordinates,
+        })
     }
 }
 
