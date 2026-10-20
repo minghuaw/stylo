@@ -9,6 +9,7 @@
 use crate::derives::*;
 use crate::values::computed::{Context, ToComputedValue};
 use crate::values::specified;
+use crate::values::specified::align;
 
 pub use super::specified::{ContentDistribution, ItemPlacement, SelfAlignment};
 
@@ -63,11 +64,11 @@ impl ToComputedValue for specified::JustifyItems {
     type ComputedValue = JustifyItems;
 
     /// <https://drafts.csswg.org/css-align/#valdef-justify-items-legacy>
-    fn to_computed_value(&self, _context: &Context) -> JustifyItems {
+    fn to_computed_value(&self, context: &Context) -> JustifyItems {
         use crate::values::specified::align;
         let specified = *self;
         let computed = if (self.0).0 != align::AlignFlags::LEGACY {
-            *self
+            Self(self.0.to_computed_value(context))
         } else {
             // If the inherited value of `justify-items` includes the
             // `legacy` keyword, `legacy` computes to the inherited value, but
@@ -86,5 +87,59 @@ impl ToComputedValue for specified::JustifyItems {
     fn from_computed_value(computed: &JustifyItems) -> Self {
         // When un-computing, the value that matters is the actually computed one.
         computed.computed
+    }
+}
+
+impl ToComputedValue for specified::ContentDistribution {
+    type ComputedValue = ContentDistribution;
+
+    /// Legacy aliases for the flow-relative alignments serialize as their
+    /// canonical keywords in computed styles.
+    ///
+    /// See <https://drafts.csswg.org/css-align/#valdef-self-position-flow-start>.
+    #[inline]
+    fn to_computed_value(&self, _context: &Context) -> Self::ComputedValue {
+        ContentDistribution::new(align::canonicalize_computed_alignment(self.primary()))
+    }
+
+    #[inline]
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        *computed
+    }
+}
+
+impl ToComputedValue for specified::ItemPlacement {
+    type ComputedValue = ItemPlacement;
+
+    /// Legacy aliases for the flow-relative alignments serialize as their
+    /// canonical keywords in computed styles.
+    ///
+    /// See <https://drafts.csswg.org/css-align/#valdef-self-position-flow-start>.
+    #[inline]
+    fn to_computed_value(&self, _context: &Context) -> Self::ComputedValue {
+        ItemPlacement(align::canonicalize_computed_alignment(self.0))
+    }
+
+    #[inline]
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        *computed
+    }
+}
+
+impl ToComputedValue for specified::SelfAlignment {
+    type ComputedValue = SelfAlignment;
+
+    /// Legacy aliases for the flow-relative alignments serialize as their
+    /// canonical keywords in computed styles.
+    ///
+    /// See <https://drafts.csswg.org/css-align/#valdef-self-position-flow-start>.
+    #[inline]
+    fn to_computed_value(&self, _context: &Context) -> SelfAlignment {
+        SelfAlignment(align::canonicalize_computed_alignment(self.0))
+    }
+
+    #[inline]
+    fn from_computed_value(computed: &SelfAlignment) -> Self {
+        *computed
     }
 }
